@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>지수함수의 최대 최소</title>
+
+  <!-- MathJax 로드 (LaTeX 수식 렌더링) -->
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" defer></script>
+
+  <style>
+    body {
+      background-color: #000;  /* 검정 배경 */
+      color: #fff;             /* 흰 글씨 */
+      font-family: sans-serif;
+      margin: 20px;
+    }
+    #gameContainer {
+      max-width: 600px;
+      margin: 0 auto;
+      border: 1px solid #777;
+      padding: 20px;
+    }
+    .hidden {
+      display: none;
+    }
+    .energy-bar {
+      width: 100%;
+      height: 10px;
+      background-color: #fff;  /* 흰 테두리 */
+      margin: 10px 0;
+      position: relative;
+    }
+    .energy-fill {
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      background-color: #333;  /* 검정/회색으로 채우기 */
+      width: 100%;
+      transition: width 0.2s linear;
+    }
+    .choices-container {
+      margin: 10px 0;
+    }
+    .choice-button {
+      display: block;
+      width: 100%;
+      margin-bottom: 5px;
+      background: #111;
+      color: #fff;
+      border: 1px solid #555;
+      padding: 8px;
+      cursor: pointer;
+      text-align: left;
+    }
+    .choice-button:hover {
+      background: #222;
+    }
+    #response {
+      white-space: pre;
+      margin-top: 10px;
+      border: 1px solid #555;
+      padding: 5px;
+    }
+    .center {
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<div id="gameContainer">
+
+  <!-- 첫 화면: 이름 입력 / 난이도 선택 -->
+  <div id="startScreen">
+    <h2>지수함수의 최대 최소</h2>
+    <label>이름: <input type="text" id="playerName" /></label>
+    <p>난이도를 선택하세요.</p>
+    <button onclick="selectDifficulty('top')">최상(20초/문제, 20점)</button>
+    <button onclick="selectDifficulty('high')">상(30초/문제, 15점)</button>
+    <button onclick="selectDifficulty('mid')">중(40초/문제, 13점)</button>
+    <button onclick="selectDifficulty('low')">하(제한없음, 10점)</button>
+  </div>
+
+  <!-- 퀴즈 화면 -->
+  <div id="quizScreen" class="hidden">
+
+    <div>
+      총 경과시간: <span id="totalTime">0</span>초
+      &emsp;|&emsp;
+      남은 기회: <span id="lives">3</span>
+      &emsp;|&emsp;
+      현재 점수: <span id="score">0</span>
+    </div>
+
+    <div class="energy-bar" id="energyBar">
+      <div class="energy-fill" id="energyFill"></div>
+    </div>
+
+    <div id="questionText"></div>
+    <div class="choices-container" id="choicesContainer"></div>
+  </div>
+
+  <!-- 게임 종료 화면 -->
+  <div id="endScreen" class="hidden center">
+    <h2>게임 종료</h2>
+    <p>최종 점수: <span id="finalScore"></span></p>
+    <p>총 소요 시간: <span id="finalTime"></span>초</p>
+    <button onclick="sendScore()">점수전송</button>
+    <div id="response"></div>
+  </div>
+
+</div>
+
+<script>
+// ----- 문제 리스트 (문항번호 표시 없이). -----
+// 문제는 "question"(텍스트/수식 포함), "choices"(4개 보기를 배열), "correct"(정답 인덱스)로 구성
+// 실제 출제 시에는 questions를 셔플(shuffle)하여 임의 순서로 보여줄 예정
+
+// (1) 원본 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 74 (총 14문항)
+// (2) 유사문제 유형1 (9문항), 유형2(1,2,3,4,6,7,8,9,10) → 총 9문항
+// 따라서 전체 14 + 9 + 9 = 32문항
+
+const allQuestions = [
+
+  // --- 원본 문제 (73,75 제외) ---
+
+  {
+    question: "다음 함수 \\(y = 5 + 2^x + 2^{-x}\\) 의 최솟값은?",
+    choices: ["5", "6", "7", "8"],
+    correct: 2  // '7'
+  },
+  {
+    question: "다음 함수 \\(y = 2^x + 2^{-x}\\) 의 최솟값은?",
+    choices: ["1", "2", "3", "4"],
+    correct: 1  // '2'
+  },
+  {
+    question: "다음 함수 \\(y = 1 + 2^x + 2^{-x}\\) 의 최솟값은?",
+    choices: ["2", "3", "4", "5"],
+    correct: 1  // '3'
+  },
+  {
+    question: "다음 함수 \\(y = 2\\cdot 3^x + \\dfrac{8}{3^x}\\) 의 최솟값은?",
+    choices: ["4", "6", "8", "9"],
+    correct: 2  // '8'
+  },
+  {
+    question: "다음 함수 \\(y = 3^x + 3^{-x} + 2\\) 의 최솟값은?",
+    choices: ["2", "3", "4", "5"],
+    correct: 2  // '4'
+  },
+  {
+    question: "다음 함수 \\(y = 9^x + 4\\cdot 9^{-x}\\) 의 최솟값은?",
+    choices: ["2", "3", "4", "6"],
+    correct: 2  // '4'
+  },
+  {
+    question: "다음 함수 \\(y = 5^{2 - x} + 5^{x + 3}\\) 의 최솟값은?",
+    choices: ["\\(40\\sqrt{5}\\)", "\\(45\\sqrt{5}\\)", "\\(50\\sqrt{5}\\)", "\\(55\\sqrt{5}\\)"],
+    correct: 2
+  },
+  {
+    question: "다음 함수 \\(y = 4^x + 4^{-x} + 2^x + 2^{-x}\\) 의 최솟값은?",
+    choices: ["2", "3", "4", "5"],
+    correct: 2
+  },
+  {
+    question: "다음 식 \\(y = 2^x + 3^x + \\left(\\dfrac{1}{2}\\right)^x + \\left(\\dfrac{1}{3}\\right)^x + 5\\) 의 최솟값은?",
+    choices: ["7", "8", "9", "10"],
+    correct: 2
+  },
+  {
+    question: "정의역 전체에서 \\(y = 3\\bigl(4^x + 4^{-x}\\bigr) - 10\\bigl(2^x + 2^{-x}\\bigr)\\) 의 최솟값은?",
+    choices: ["-14", "-12", "-10", "-8"],
+    correct: 0
+  },
+  {
+    question: "다음 식 \\(y = 2\\bigl(2^x + 2^{-x}\\bigr) - \\bigl(4^x + 4^{-x}\\bigr)\\) 의 최댓값은?",
+    choices: ["1", "2", "3", "4"],
+    correct: 1
+  },
+  {
+    question: "정의역 \\(-1 \\le x \\le 2\\)에서 \\(y = 4^x - 2^x + 1\\) 이 \\(x=a\\)에서 최소값 \\(b\\)를 가질 때 \\(a + b\\)는?",
+    choices: ["\\(-\\tfrac{1}{2}\\)", "\\(-\\tfrac{1}{4}\\)", "0", "\\(\\tfrac{1}{4}\\)"],
+    correct: 1
+  },
+  {
+    question: "정의역 \\(0 \\le x \\le 2\\) 에서 \\(y = 9^x + 2\\cdot 3^{x+1} + 9\\) 의 최댓값과 최솟값을 구한 뒤, 그 합을 구하시오.",
+    choices: ["144", "160", "164", "180"],
+    correct: 1
+  },
+  {
+    question: "정의역 \\(0 \\le x \\le 2\\) 에서 \\(y = 4^x - 2^x + 2 + a\\) 의 최솟값이 \\(-3\\)이라 할 때, 그때의 최댓값을 \\(M\\)이라 하고, \\(a + M\\)을 구하시오.",
+    choices: ["3", "4", "5", "6"],
+    correct: 1
+  },
+  {
+    question: "정의역 \\(-1 \\le x \\le 2\\) 에서 \\(y = (4\\cdot 2^x)^2 + 4^{x+1}\\) 가 \\(x = \\alpha\\)에서 최솟값 \\(m\\)을 가질 때, \\(\\dfrac{8}{3}\\alpha + m\\) 은?",
+    choices: ["\\(\\tfrac{5}{3}\\)", "\\(\\tfrac{7}{3}\\)", "3", "4"],
+    correct: 1
+  },
+
+  // --- 유사문제: 유형1 (총 9문항, A8 생략된 상태였으므로 여기선 이미 반영) ---
+
+  {
+    question: "함수 \\(y = 3 + 2^x + 2^{-x}\\) 의 최솟값은?",
+    choices: ["4", "5", "6", "7"],
+    correct: 1 // 5
+  },
+  {
+    question: "\\(y = 7 + 3^x + 3^{-x}\\) 의 최솟값은?",
+    choices: ["8", "9", "10", "11"],
+    correct: 1 // 9
+  },
+  {
+    question: "\\(y = 2\\cdot 5^x + \\dfrac{25}{5^x}\\) 의 최솟값은?",
+    choices: ["\\(5\\sqrt{2}\\)", "\\(10\\sqrt{2}\\)", "15", "20"],
+    correct: 1
+  },
+  {
+    question: "\\(y = 4^x + 4^{-x} + 6\\) 의 최솟값은?",
+    choices: ["6", "7", "8", "9"],
+    correct: 2 // 8
+  },
+  {
+    question: "\\(y = 9^x + 9^{-x}\\) 의 최솟값은?",
+    choices: ["1", "2", "3", "4"],
+    correct: 1 // 2
+  },
+  {
+    question: "\\(y = 2\\cdot 7^x + \\dfrac{49}{7^x}\\) 의 최솟값은?",
+    choices: ["\\(7\\sqrt{2}\\)", "14", "\\(14\\sqrt{2}\\)", "28"],
+    correct: 2
+  },
+  {
+    question: "\\(y = 3^x + 3^{-x} + 5\\) 의 최솟값은?",
+    choices: ["6", "7", "8", "9"],
+    correct: 1 //7
+  },
+  {
+    question: "\\(y = (5^x)^2 + \\dfrac{1}{(5^x)^2}\\) 의 최솟값은?",
+    choices: ["1", "2", "3", "4"],
+    correct: 1 //2
+  },
+  {
+    question: "\\(y = 2^x + 3^x + 2^{-x} + 3^{-x}\\) 의 최솟값은?",
+    choices: ["2", "3", "4", "5"],
+    correct: 2 //4
+  },
+
+  // --- 유사문제: 유형2 (1,2,3,4,6,7,8,9,10) => 총 9문항 (#5 생략)
+
+  {
+    question: "정의역 \\([-2, 1]\\) 에서 \\(f(x)=\\left(\\tfrac{1}{2}\\right)^{x+1}\\). 이 함수의 최대값 \\(M\\)과 최소값 \\(m\\)을 구한 뒤 \\(M + m\\)은?",
+    choices: ["2", "\\(\\tfrac{9}{4}\\)", "\\(\\tfrac{5}{2}\\)", "3"],
+    correct: 1 // 9/4
+  },
+  {
+    question: "정의역 \\([0,3]\\) 에서 \\(y=9^x - 3^x + 5\\). 최대값 \\(M\\), 최소값 \\(m\\)을 구하여 \\(M\\times m\\)은?",
+    choices: ["3525", "3530", "3535", "3540"],
+    correct: 2 //3535
+  },
+  {
+    question: "정의역 \\([-1,2]\\) 인 함수 \\(y=2^{2x} + 2^x\\) 의 최대값 \\(M\\)과 최소값 \\(m\\)을 구한 뒤 \\(M - m\\) 은?",
+    choices: ["19", "19.25", "19.5", "20"],
+    correct: 1 //19.25
+  },
+  {
+    question: "정의역 \\([-1,1]\\) 에서 \\(y=4^x + x^2\\). 이때 최댓값 \\(M\\), 최솟값 \\(m\\)에 대하여 \\(M + m\\)은?",
+    choices: ["5", "6", "7", "8"],
+    correct: 1 //6
+  },
+  {
+    question: "정의역 \\([0,2]\\) 에서 \\(y=(3^x+4)^2\\). 최대값 \\(M\\), 최소값 \\(m\\)을 구하고 \\(M + m\\)을 구하시오.",
+    choices: ["169", "170", "180", "194"],
+    correct: 3 //194
+  },
+  {
+    question: "정의역 \\([-1,2]\\) 인 \\(y=x^2 + 4^x\\). 최대값 \\(M\\), 최솟값 \\(m\\) 을 찾았을 때 \\(M - m\\)에 가까운 것은?",
+    choices: ["19.0", "19.3", "19.5", "20"],
+    correct: 1 // 약 19.3
+  },
+  {
+    question: "정의역 \\([-1,3]\\) 에서 \\(y=\\left(\\tfrac{1}{3}\\right)^x + 2\\). 최대값 \\(M\\), 최소값 \\(m\\) 을 구하시오.",
+    choices: [
+      "(M,m)=(3,\\;2+\\tfrac{1}{3^3})",
+      "(M,m)=(5,\\;2+\\tfrac{1}{3^2})",
+      "(M,m)=(3,\\;2+\\tfrac{1}{3^2})",
+      "(M,m)=(5,\\;2+\\tfrac{1}{3^3})"
+    ],
+    correct: 3 // (5, 2+1/27)
+  },
+  {
+    question: "정의역 \\([-2,2]\\) 에서 \\(y=(5^x + 5^{-x}) - 2\\). 최대값 \\(M\\), 최소값 \\(m\\)을 찾고 \\(M\\times m\\)은?",
+    choices: ["0", "1", "23.04", "\\(\\dfrac{576}{25}\\)"],
+    correct: 0 // 0
+  },
+  {
+    question: "정의역 \\([0,1]\\) 에서 \\(y=x^2 + 2^x\\). 최댓값과 최솟값을 구하여 두 값의 합은?",
+    choices: ["3", "4", "5", "6"],
+    correct: 1 //4
+  }
+
+];
+
+// ----- 전역 변수들 -----
+let shuffledQuestions = [];
+let currentIndex = 0;
+let totalScore = 0;
+let lives = 3;
+let totalElapsed = 0;  // 전체 경과 시간(초)
+let questionTimer = null;
+let difficulty = 'low';
+let timeLimitPerQuestion = 999999; // "하"일 때는 사실상 제한 없음
+let scorePerCorrect = 10; // 기본 10점
+let answeredCount = 0;
+let usedAllOnce = false; // 모든 문제를 한바퀴 소진했는지 여부
+const maxQuestions = allQuestions.length;
+const startTime = Date.now();
+
+// ----- 난이도 선택 -----
+function selectDifficulty(level) {
+  const nameInput = document.getElementById('playerName');
+  if (!nameInput.value.trim()) {
+    alert("이름을 입력하세요!");
+    return;
+  }
+
+  difficulty = level;
+  if (level === 'top') {
+    timeLimitPerQuestion = 20000;
+    scorePerCorrect = 20;
+  } else if (level === 'high') {
+    timeLimitPerQuestion = 30000;
+    scorePerCorrect = 15;
+  } else if (level === 'mid') {
+    timeLimitPerQuestion = 40000;
+    scorePerCorrect = 13;
+  } else {
+    timeLimitPerQuestion = 99999999; // 사실상 무제한
+    scorePerCorrect = 10;
+  }
+
+  document.getElementById('startScreen').classList.add('hidden');
+  document.getElementById('quizScreen').classList.remove('hidden');
+
+  startQuiz();
+}
+
+// ----- 퀴즈 초기화 -----
+function startQuiz() {
+  // 문제 목록 셔플
+  shuffledQuestions = [...allQuestions];
+  shuffleArray(shuffledQuestions);
+
+  currentIndex = 0;
+  totalScore = 0;
+  lives = 3;
+  answeredCount = 0;
+  usedAllOnce = false;
+  document.getElementById('lives').innerText = lives;
+  document.getElementById('score').innerText = totalScore;
+
+  updateTotalTime();
+  showQuestion();
+  // 전체 시간 타이머(1초마다)
+  setInterval(() => {
+    totalElapsed = Math.floor((Date.now() - startTime) / 1000);
+    updateTotalTime();
+  }, 1000);
+}
+
+// ----- 총 경과시간 표시 -----
+function updateTotalTime() {
+  document.getElementById('totalTime').innerText = totalElapsed;
+}
+
+// ----- 문제 표시 -----
+function showQuestion() {
+  if (lives <= 0) {
+    endGame();
+    return;
+  }
+
+  // 아직 첫 바퀴가 끝나지 않은 경우
+  if (currentIndex >= maxQuestions && !usedAllOnce) {
+    // 한 바퀴 소진 완료. 이후로 무제한 랜덤.
+    usedAllOnce = true;
+  }
+
+  // 만약 첫 바퀴 끝났으면, 무한 랜덤으로 문제 출제
+  const qObj = (usedAllOnce)
+    ? getRandomElement(allQuestions)
+    : shuffledQuestions[currentIndex];
+
+  // 화면에 표시
+  const qTextDiv = document.getElementById('questionText');
+  qTextDiv.innerHTML = qObj.question;
+
+  // 보기들 셔플
+  let indices = [0,1,2,3];
+  shuffleArray(indices);
+
+  const choicesDiv = document.getElementById('choicesContainer');
+  choicesDiv.innerHTML = '';
+
+  indices.forEach(idx => {
+    const btn = document.createElement('button');
+    btn.className = 'choice-button';
+    btn.innerHTML = qObj.choices[idx];
+    btn.onclick = () => checkAnswer(qObj, idx, qObj.correct);
+    choicesDiv.appendChild(btn);
+  });
+
+  // 문제 렌더링 후 MathJax 새로 고침
+  MathJax.typeset();
+
+  // 에너지바 리셋
+  resetEnergyBar();
+
+  // 타이머 설정 (하 난이도면 사실상 제한X)
+  if (questionTimer) {
+    clearTimeout(questionTimer);
+    questionTimer = null;
+  }
+  if (timeLimitPerQuestion < 99999999) {
+    questionTimer = setTimeout(()=>{
+      // 시간 초과 => 자동 오답 처리
+      handleWrong(qObj);
+    }, timeLimitPerQuestion);
+  }
+}
+
+// ----- 답안 체크 -----
+function checkAnswer(qObj, chosenIdx, correctIdx) {
+  if (questionTimer) {
+    clearTimeout(questionTimer);
+    questionTimer = null;
+  }
+
+  if (chosenIdx === correctIdx) {
+    // 정답
+    totalScore += scorePerCorrect;
+    document.getElementById('score').innerText = totalScore;
+  } else {
+    // 오답
+    handleWrong(qObj);
+    return;
+  }
+
+  // 다음 문제로
+  goNext();
+}
+
+// ----- 오답 처리 -----
+function handleWrong(qObj) {
+  lives--;
+  document.getElementById('lives').innerText = lives;
+  // 정답 보여주기
+  const correctAnswerText = qObj.choices[qObj.correct];
+  alert("오답!\n정답은: " + correctAnswerText);
+
+  if (lives <= 0) {
+    endGame();
+    return;
+  }
+  goNext();
+}
+
+// ----- 다음 문제 이동 -----
+function goNext() {
+  if (!usedAllOnce) {
+    currentIndex++;
+    answeredCount++;
+    if (answeredCount >= maxQuestions) {
+      usedAllOnce = true;
+    }
+  }
+  showQuestion();
+}
+
+// ----- 에너지바 초기화 / 애니메이션 -----
+function resetEnergyBar() {
+  const energyFill = document.getElementById('energyFill');
+  energyFill.style.width = "100%";
+
+  if (timeLimitPerQuestion >= 99999999) {
+    // 제한 없음
+    energyFill.style.transition = "none";
+    energyFill.style.width = "100%"; 
+    return;
+  }
+
+  // CSS transition 시간(timeLimitPerQuestion ms) 동안 너비가 0%로
+  setTimeout(()=>{
+    energyFill.style.transition = `width ${timeLimitPerQuestion}ms linear`;
+    energyFill.style.width = "0%";
+  }, 50);
+}
+
+// ----- 게임 종료 처리 -----
+function endGame() {
+  document.getElementById('quizScreen').classList.add('hidden');
+  document.getElementById('endScreen').classList.remove('hidden');
+  document.getElementById('finalScore').innerText = totalScore;
+  document.getElementById('finalTime').innerText = totalElapsed;
+}
+
+// ----- 점수 전송 -----
+function sendScore() {
+  const gameName = "지수함수의 최대 최소";
+  const name = document.getElementById('playerName').value.trim();
+  const score = totalScore;
+  const elapsed = totalElapsed;
+
+  saveData(gameName, name, score, elapsed);
+}
+
+// ----- shuffle 함수 -----
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const r = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[r]] = [arr[r], arr[i]];
+  }
+}
+
+function getRandomElement(arr) {
+  const r = Math.floor(Math.random() * arr.length);
+  return arr[r];
+}
+
+// ----- 문제 전송 함수 (주어진 코드 원형에 가깝게) -----
+function saveData(game, name, score, elapsedTime) {
+  const FUNCTION_URL = "https://us-central1-record-f420d.cloudfunctions.net/report";
+
+  const requestData = {
+    game,
+    name,
+    score: parseInt(score, 10),
+    elapsedTime: parseInt(elapsedTime, 10)
+  };
+
+  try {
+    const response = fetch(FUNCTION_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestData)
+    });
+
+    const responseData = response.then(r => r.json());
+    responseData.then(data => {
+      if (response.ok) {
+        document.getElementById('response').innerText = 
+          "성공: " + JSON.stringify(data, null, 2);
+      } else {
+        document.getElementById('response').innerText = 
+          "오류: " + JSON.stringify(data, null, 2);
+      }
+    });
+  } catch (error) {
+    console.error('요청 실패:', error);
+    document.getElementById('response').innerText =
+      "네트워크 오류: " + error.message;
+  }
+}
+</script>
+</body>
+</html>
